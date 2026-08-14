@@ -41,7 +41,7 @@ app = FastAPI(lifespan=lifespan)
 def health():
     return {"status": "ok"}
 
-@app.get("/vacancies")
+@app.get("/vacancies", response_model=list[VacancySummary])
 def get_vacancies(
     offset: int = 0,
     limit: int = 20,
@@ -62,7 +62,7 @@ def get_vacancies(
     filtered_vacancies = filtered_vacancies[offset:offset+limit]
     return [summarize(v) for v in filtered_vacancies]
 
-@app.get("/vacancies/{id:path}")
+@app.get("/vacancies/{id:path}", response_model=PolozkyItem)
 def get_vacancy(id: str):
     vacancy = next((v for v in vacancies if v.id == id), None)
     if vacancy is None:

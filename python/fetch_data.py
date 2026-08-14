@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from time import time
 from typing import Dict
@@ -6,12 +7,14 @@ import httpx
 
 def fetch_data(url: str, file_path: str):
     chunk_size: int = 8192
-    if not Path(file_path).parent.exists():
-        Path(file_path).parent.mkdir(parents=True, exist_ok=True)    
+    tmp_file_path = file_path.with_suffix(file_path.suffix + str(os.getpid()) + ".tmp")
+    if not Path(tmp_file_path).parent.exists():
+        Path(tmp_file_path).parent.mkdir(parents=True, exist_ok=True)    
     with httpx.stream("GET", url) as r:
-        with open(file_path, "wb") as f:
+        with open(tmp_file_path, "wb") as f:
             for data in r.iter_bytes(chunk_size):
                 f.write(data)
+    os.replace(tmp_file_path, file_path)
 
 def get_cached_data(url: str, file_path: str) -> Dict:
     max_age_hours: int = 24

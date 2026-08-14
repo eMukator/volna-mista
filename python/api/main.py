@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fetch_data import get_cached_data
@@ -61,3 +61,10 @@ def get_vacancies(
         filtered_vacancies = [v for v in filtered_vacancies if v.pozadovanaProfese and profese.lower() in v.pozadovanaProfese.cs.lower()]
     filtered_vacancies = filtered_vacancies[offset:offset+limit]
     return [summarize(v) for v in filtered_vacancies]
+
+@app.get("/vacancies/{id:path}")
+def get_vacancy(id: str):
+    vacancy = next((v for v in vacancies if v.id == id), None)
+    if vacancy is None:
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+    return vacancy

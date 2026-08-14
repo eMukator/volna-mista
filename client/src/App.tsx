@@ -1,24 +1,33 @@
 import { useEffect, useState } from 'react'
+import { fetchVacancies, type VacancySummary } from './api';
 
 function App() {
 
-  const [health, setHealth] = useState('unknown');
+  const [error, setError] = useState<string | null>(null)
+  const [vacancies, setVacancies] = useState<VacancySummary[]>([]);
 
-  const getHealth = async() => {
-    let health = 'unknown'
-    const response = await fetch('/api/health')
-    const data = await response.json()
-    health = data.status == 'ok' ? 'healthy' : data.status
-    return health;
+  const getVacancies = async() => {
+    try {
+      const response = await fetchVacancies();
+      setVacancies(response);
+    }
+    catch (error) {
+      setError(error instanceof Error ? error.message : 'Nepodařilo se načíst data')
+    }
   }
 
   useEffect(() => {
-    getHealth().then((health) => setHealth(health));
+    getVacancies();
   }, []);
 
   return (
     <>
-      <p>Api status: {health}</p>
+      {error && <p>{error}</p>}
+      <ul>
+        {vacancies.map((vacancy) => (
+          <li key={vacancy.id}>{vacancy.profese} / {vacancy.zamestnavatel} / {vacancy.mesicni_mzda_od} - {vacancy.mesicni_mzda_do} / {vacancy.kraj}</li>
+        ))}
+      </ul>
     </>
   )
 }

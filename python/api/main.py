@@ -34,7 +34,19 @@ def summarize(item: PolozkyItem) -> VacancySummary:
         pocet_mist = item.pocetMist,
         datum_vlozeni = item.datumVlozeni,
     )
-    
+
+def get_filtered_vacancies(filtered_vacancies: list[PolozkyItem], offset: int, limit: int, kraj: str | None, typ_mzdy: str | None, mzda_min: float | None, profese: str | None) -> list[VacancySummary]:
+    if kraj is not None:
+        filtered_vacancies = [v for v in filtered_vacancies if get_kraj(v) == kraj]
+    if typ_mzdy is not None:
+        filtered_vacancies = [v for v in filtered_vacancies if v.typMzdy and v.typMzdy.id == typ_mzdy]
+    if mzda_min is not None:
+        filtered_vacancies = [v for v in filtered_vacancies if v.mesicniMzdaOd is not None and v.mesicniMzdaOd >= mzda_min]
+    if profese is not None:
+        filtered_vacancies = [v for v in filtered_vacancies if v.pozadovanaProfese and profese.lower() in v.pozadovanaProfese.cs.lower()]
+    filtered_vacancies = filtered_vacancies[offset:offset+limit]
+    return [summarize(v) for v in filtered_vacancies]
+
 app = FastAPI(lifespan=lifespan)
 
 @app.get("/health")
@@ -50,17 +62,7 @@ def get_vacancies(
     mzda_min: float | None = None,
     profese: str | None = None,    
 ):
-    filtered_vacancies = vacancies
-    if kraj is not None:
-        filtered_vacancies = [v for v in filtered_vacancies if get_kraj(v) == kraj]
-    if typ_mzdy is not None:
-        filtered_vacancies = [v for v in filtered_vacancies if v.typMzdy and v.typMzdy.id == typ_mzdy]
-    if mzda_min is not None:
-        filtered_vacancies = [v for v in filtered_vacancies if v.mesicniMzdaOd is not None and v.mesicniMzdaOd >= mzda_min]
-    if profese is not None:
-        filtered_vacancies = [v for v in filtered_vacancies if v.pozadovanaProfese and profese.lower() in v.pozadovanaProfese.cs.lower()]
-    filtered_vacancies = filtered_vacancies[offset:offset+limit]
-    return [summarize(v) for v in filtered_vacancies]
+    return get_filtered_vacancies(vacancies, offset, limit, kraj, typ_mzdy, mzda_min, profese)
 
 @app.get("/vacancies/{id:path}", response_model=PolozkyItem)
 def get_vacancy(id: str):

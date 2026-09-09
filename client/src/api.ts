@@ -29,7 +29,8 @@ export async function fetchVacancies(filters: VacancyFilters = {}): Promise<Vaca
 
   const response = await fetch(`/api/vacancies?${params}`)
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail ?? `HTTP error! status: ${response.status}`)
   }
   const data = await response.json()
   return data as VacancySummary[]
@@ -38,7 +39,8 @@ export async function fetchVacancies(filters: VacancyFilters = {}): Promise<Vaca
 export async function fetchVacancyById(id: string): Promise<Vacancy> {
   const response = await fetch(`/api/vacancies/${id}`)
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail ?? `HTTP error! status: ${response.status}`)
   }
   const data = await response.json()
   return data as Vacancy

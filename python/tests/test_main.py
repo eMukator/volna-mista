@@ -1,7 +1,9 @@
+import json
 from models import PolozkyItem
-from api.main import get_filtered_vacancies
+from api.main import get_filtered_vacancies, app, ready
 from db import fill_sqlite_from_json
 from tools import get_kraj
+from fastapi.testclient import TestClient
 
 def make_vacancy(**overrides) -> PolozkyItem:
     data = {
@@ -46,7 +48,8 @@ def test_get_filtered_vacancies_filters_by_kraj(tmp_path):
     filtered_vacancies: list[PolozkyItem] = []
     vacancy1 = make_vacancy(id="1", mistoVykonuPrace={"pracoviste": [{"adresa": {"kraj": {"id": "Kraj/1"}}, "nazev": "Test1"}]})
     vacancy2 = make_vacancy(id="2", mistoVykonuPrace={"pracoviste": [{"adresa": {"kraj": {"id": "Kraj/2"}}, "nazev": "Test2"}]})
-    fill_sqlite_from_json({"polozky": [vacancy1.model_dump(mode="json"), vacancy2.model_dump(mode="json")]}, tmp_path / "test.db")
+    with open(tmp_path / "data.json", "w") as f: json.dump({"polozky": [vacancy1.model_dump(mode="json"), vacancy2.model_dump(mode="json")]}, f)
+    fill_sqlite_from_json(tmp_path / "data.json", tmp_path / "test.db")
     filtered_vacancies.extend([vacancy1, vacancy2])
     filtered = get_filtered_vacancies(tmp_path / "test.db", offset=0, limit=10, kraj="Kraj/1", typ_mzdy=None, mzda_min=None, profese=None)
     assert len(filtered) == 1
@@ -55,7 +58,8 @@ def test_get_filtered_vacancies_filters_by_kraj(tmp_path):
 def test_get_filtered_vacancies_filters_by_typ_mzdy(tmp_path):
     vacancy1 = make_vacancy(id="1", typMzdy={"id": "TypMzdy/mesic"})
     vacancy2 = make_vacancy(id="2", typMzdy={"id": "TypMzdy/hod"})
-    fill_sqlite_from_json({"polozky": [vacancy1.model_dump(mode="json"), vacancy2.model_dump(mode="json")]}, tmp_path / "test.db")
+    with open(tmp_path / "data.json", "w") as f: json.dump({"polozky": [vacancy1.model_dump(mode="json"), vacancy2.model_dump(mode="json")]}, f)
+    fill_sqlite_from_json(tmp_path / "data.json", tmp_path / "test.db")
     filtered = get_filtered_vacancies(tmp_path / "test.db", offset=0, limit=10, kraj=None, typ_mzdy="TypMzdy/mesic", mzda_min=None, profese=None)
     assert len(filtered) == 1
     assert filtered[0].id == "1"
@@ -64,7 +68,8 @@ def test_get_filtered_vacancies_filters_by_mzda_min_and_ignores_none(tmp_path):
     vacancy1 = make_vacancy(id="1", mesicniMzdaOd=30000)
     vacancy2 = make_vacancy(id="2", mesicniMzdaOd=20000)
     vacancy3 = make_vacancy(id="3", mesicniMzdaOd=None)
-    fill_sqlite_from_json({"polozky": [vacancy1.model_dump(mode="json"), vacancy2.model_dump(mode="json"), vacancy3.model_dump(mode="json")]}, tmp_path / "test.db")
+    with open(tmp_path / "data.json", "w") as f: json.dump({"polozky": [vacancy1.model_dump(mode="json"), vacancy2.model_dump(mode="json"), vacancy3.model_dump(mode="json")]}, f)
+    fill_sqlite_from_json(tmp_path / "data.json", tmp_path / "test.db")
     filtered = get_filtered_vacancies(tmp_path / "test.db", offset=0, limit=10, kraj=None, typ_mzdy=None, mzda_min=25000, profese=None)
     assert len(filtered) == 1
     assert filtered[0].id == "1"
@@ -72,14 +77,16 @@ def test_get_filtered_vacancies_filters_by_mzda_min_and_ignores_none(tmp_path):
 def test_get_filtered_vacancies_filters_by_profese_case_insensitive_substring(tmp_path):
     vacancy1 = make_vacancy(id="1", pozadovanaProfese={"cs": "Pomocný kuchař".lower()})
     vacancy2 = make_vacancy(id="2", pozadovanaProfese={"cs": "Prodavač".lower()})
-    fill_sqlite_from_json({"polozky": [vacancy1.model_dump(mode="json"), vacancy2.model_dump(mode="json")]}, tmp_path / "test.db")
+    with open(tmp_path / "data.json", "w") as f: json.dump({"polozky": [vacancy1.model_dump(mode="json"), vacancy2.model_dump(mode="json")]}, f)
+    fill_sqlite_from_json(tmp_path / "data.json", tmp_path / "test.db")
     filtered = get_filtered_vacancies(tmp_path / "test.db", offset=0, limit=10, kraj=None, typ_mzdy=None, mzda_min=None, profese="KUCHAŘ")
     assert len(filtered) == 1
     assert filtered[0].id == "1"
 
 def test_get_filtered_vacancies_paginates_with_offset_and_limit(tmp_path):
     vacancies = [make_vacancy(id=str(i)) for i in range(5)]
-    fill_sqlite_from_json({"polozky": [vacancy.model_dump(mode="json") for vacancy in vacancies]}, tmp_path / "test.db")
+    with open(tmp_path / "data.json", "w") as f: json.dump({"polozky": [vacancy.model_dump(mode="json") for vacancy in vacancies]}, f)
+    fill_sqlite_from_json(tmp_path / "data.json", tmp_path / "test.db")
     filtered = get_filtered_vacancies(tmp_path / "test.db", offset=2, limit=2, kraj=None, typ_mzdy=None, mzda_min=None, profese=None)
     assert [v.id for v in filtered] == ["2", "3"]
 
@@ -87,13 +94,26 @@ def test_get_filtered_vacancies_combines_filters_with_and(tmp_path):
     vacancy1 = make_vacancy(id="1", typMzdy={"id": "TypMzdy/mesic"}, mesicniMzdaOd=30000)
     vacancy2 = make_vacancy(id="2", typMzdy={"id": "TypMzdy/mesic"}, mesicniMzdaOd=10000)
     vacancy3 = make_vacancy(id="3", typMzdy={"id": "TypMzdy/hod"}, mesicniMzdaOd=30000)
-    fill_sqlite_from_json({"polozky": [vacancy1.model_dump(mode="json"), vacancy2.model_dump(mode="json"), vacancy3.model_dump(mode="json")]}, tmp_path / "test.db")
+    with open(tmp_path / "data.json", "w") as f: json.dump({"polozky": [vacancy1.model_dump(mode="json"), vacancy2.model_dump(mode="json"), vacancy3.model_dump(mode="json")]}, f)
+    fill_sqlite_from_json(tmp_path / "data.json", tmp_path / "test.db")
     filtered = get_filtered_vacancies(tmp_path / "test.db", offset=0, limit=10, kraj=None, typ_mzdy="TypMzdy/mesic", mzda_min=20000, profese=None)
     assert len(filtered) == 1
     assert filtered[0].id == "1"
 
 def test_get_filtered_vacancies_returns_all_when_no_filters(tmp_path):
     vacancies = [make_vacancy(id=str(i)) for i in range(3)]
-    fill_sqlite_from_json({"polozky": [vacancy.model_dump(mode="json") for vacancy in vacancies]}, tmp_path / "test.db")
+    with open(tmp_path / "data.json", "w") as f: json.dump({"polozky": [vacancy.model_dump(mode="json") for vacancy in vacancies]}, f)
+    fill_sqlite_from_json(tmp_path / "data.json", tmp_path / "test.db")
     filtered = get_filtered_vacancies(tmp_path / "test.db", offset=0, limit=10, kraj=None, typ_mzdy=None, mzda_min=None, profese=None)
     assert len(filtered) == 3
+
+def test_not_ready_service_returns_503(monkeypatch):
+    original_ready = ready
+    try:
+        monkeypatch.setattr("api.main.ready", False)
+        client = TestClient(app)
+        response = client.get("/vacancies")
+        assert response.status_code == 503
+        assert response.json() == {"detail": "Service is not ready yet"}
+    finally:
+        monkeypatch.setattr("api.main.ready", original_ready)

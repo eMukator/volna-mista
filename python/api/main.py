@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 from fastapi import FastAPI, HTTPException
@@ -8,12 +9,16 @@ from api.schemas import VacancySummary
 from db import prepare_sqlite, query
 from tools import summarize
 
-# vacancies: list[PolozkyItem] = []
-db_path:str = Path(__file__).parent.parent / "data/db/volna-mista.db"
+db_path: str = Path(__file__).parent.parent / "data/db/volna-mista.db"
+ready: bool = False
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    prepare_sqlite("https://data.mpsv.cz/od/soubory/volna-mista/volna-mista.json", Path(__file__).parent.parent / "data/raw/volna-mista.json", db_path)
+    async def build():
+        global ready
+        await asyncio.to_thread(prepare_sqlite, "https://data.mpsv.cz/od/soubory/volna-mista/volna-mista.json", Path(__file__).parent.parent / "data/raw/volna-mista.json", db_path)
+        ready = True
+    asyncio.create_task(build())
     yield
     
 
@@ -63,10 +68,14 @@ def get_vacancies(
     mzda_min: float | None = None,
     profese: str | None = None,    
 ):
+    if not ready:
+        raise HTTPException(status_code=503, detail="Service is not ready yet")
     return get_filtered_vacancies(db_path, offset, limit, kraj, typ_mzdy, mzda_min, profese)
 
 @app.get("/vacancies/{id:path}", response_model=PolozkyItem)
 def get_vacancy(id: str):
+    if not ready:
+        raise HTTPException(status_code=503, detail="Service is not ready yet")
     results = query(db_path, "SELECT data FROM polozky WHERE id = ?", [id])
     if not results:
         raise HTTPException(status_code=404, detail="Vacancy not found")

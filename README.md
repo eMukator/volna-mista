@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/eMukator/volna-mista/actions/workflows/ci.yml/badge.svg)](https://github.com/eMukator/volna-mista/actions/workflows/ci.yml)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/eMukator/volna-mista)
+[![Live demo](https://img.shields.io/badge/live-demo-brightgreen)](https://app-cm7zf.us-east-1.migetapp.com/)
 
 > **Cvičný projekt.** Vznikl jako praktické osvojení Pythonu a TypeScriptu na reálném příkladu (ne jako produkční aplikace) — backend v Pythonu stahuje a servíruje otevřená data MPSV o volných místech, frontend v TypeScriptu/Reactu nad tím dělá jednoduchý vyhledávač. Kód je záměrně jednoduchý a bez zbytečných abstrakcí; níže jsou ale přesné instrukce, pokud si ho chceš spustit, prozkoumat nebo v něm pokračovat.
 
@@ -16,7 +17,8 @@ Zdroj dat: [Volná místa za celou ČR](https://data.mpsv.cz/web/data/volna-mist
 
 ## Vyzkoušet bez instalace
 
-Klikni na odznak **"Open in GitHub Codespaces"** nahoře — otevře se prohlížečové VS Code se stejným devcontainerem, jaký používáme pro vývoj (viz níže "Vývoj"). Nic není potřeba instalovat lokálně.
+- **Živá aplikace:** [app-cm7zf.us-east-1.migetapp.com](https://app-cm7zf.us-east-1.migetapp.com/) — běží na [Migetu](https://miget.com/), stačí otevřít v prohlížeči.
+- **Kód/vývoj:** klikni na odznak **"Open in GitHub Codespaces"** nahoře — otevře se prohlížečové VS Code se stejným devcontainerem, jaký používáme pro vývoj (viz níže "Vývoj"). Nic není potřeba instalovat lokálně.
 
 ## Požadavky (lokální spuštění)
 
@@ -94,25 +96,21 @@ client/
 
 ## Nasazení (produkce)
 
+Běží live na Migetu: https://app-cm7zf.us-east-1.migetapp.com/
+
 Produkční stack je oddělený od vývojového `docker-compose.yml` (ten zůstává jen pro devcontainer) a žije v [`deploy/`](deploy/):
 
-- `python/Dockerfile` — produkční image API (bez `--reload`, `pip install` napevno v image).
-- `client/Dockerfile` — vícefázový build: `npm run build` → statické soubory servíruje `nginx` na portu 5000 a `/api/*` proxuje na `api:8000` (stejné mapování jako Vite dev proxy v `vite.config.ts`).
-- `deploy/docker-compose.yml` — dvě služby, `api` (interní) a `web` (veřejná, jediná s publikovaným portem 5000).
-- `deploy/compose.miget.yaml` — overlay pro [Miget](https://miget.com/) (`x-miget: private: true` u `api`, aby nedostala vlastní veřejnou URL).
+- `deploy/Dockerfile` — jeden produkční image (vícefázový build): `npm run build` pro frontend, finální vrstva `python:3.12-slim` + `nginx`. `nginx` servíruje statický SPA build na portu 5000 a `/api/*` proxuje na `uvicorn` (`127.0.0.1:8000`, stejné mapování jako Vite dev proxy v `vite.config.ts`). Oba procesy startuje `deploy/entrypoint.sh`.
+- `deploy/docker-compose.yml` — jedna služba `app` s persistentním volume na `/app/data` (tam `db.py` staví SQLite databázi z dat MPSV).
+- `deploy/compose.miget.yaml` — overlay pro [Miget](https://miget.com/): velikost a typ persistentního disku pro volume.
 
-Ověřeno lokálně (`docker compose -f deploy/docker-compose.yml up`): `web` servíruje SPA i fallback na `index.html` pro deep-linky, `/api/health` a `/api/vacancies` fungují přes proxy.
+API a web jsou v jednom kontejneru záměrně: Migetův free tier má strop 256Mi RAM na celý projekt, ale zároveň minimum 128Mi na každou samostatnou službu — se dvěma službami by tato minima sama vyčerpala celý strop. Data z MPSV (~180 MB JSON) se navíc parsují streamovaně přes `ijson` (`python/db.py`, `use_float=True`) — načtení celého souboru najednou (`json.load`) by paměťový strop překročilo.
 
-### Nasazení na Miget + vlastní doména
+Ověřeno s reálným limitem (`docker run --memory=256m --memory-swap=256m`): peak paměti při prvním startu (stažení + naplnění SQLite) ~100 MiB, bez OOM.
 
-1. Na [miget.com](https://miget.com/) založ účet/projekt a připoj tenhle GitHub repozitář jako **Compose Stack**. Jako cestu k souboru zadej `deploy` (podadresář, ne kořen repa) — Miget si v něm najde `docker-compose.yml` a automaticky přiloží `compose.miget.yaml`.
-2. Miget nasadí obě služby; veřejně dostupná bude jen `web` (poslouchá na portu 5000, jak vyžaduje Migetův ingress), `api` zůstane interní a `web` se na ni doptává přes DNS jméno služby (`api:8000`) — stejně jako v devu.
-3. V nastavení aplikace (**Settings → Domains**) přidej `volnamista.mago.cz`, u DNS providera pro `mago.cz` vytvoř TXT záznam pro ověření vlastnictví (hodnotu ukáže dashboard) a po ověření CNAME záznam `volnamista.mago.cz` → cílová hodnota z dashboardu. Miget pak sám vystaví TLS certifikát.
-4. Každý push do `main` spustí nový produkční deploy.
-
-Poznámka: `api` po každém startu znovu stahuje `volna-mista.json` z MPSV (~180 MB, řádově desítky sekund) — po dobu startu vrací `web` na `/api/*` 502, než kontejner naběhne. Trvalé úložiště cache není zavedené (viz níže).
+Persistentní volume znamená, že se `volna-mista.json` a SQLite DB stahují/staví jen jednou za 24 h (viz freshness check v `db.py`), ne při každém restartu kontejneru — bez volume by každý restart znovu spustil několikaminutové stahování a `/api/*` by po tu dobu vracelo chybu.
 
 ## Co chybí / kam dál
 
 - Filtry na `kraj`/`typ mzdy` mají popisky natvrdo (14 krajů, 2 typy mzdy — stabilní, oficiální číselníky z data.mpsv.cz). Ostatní číselníky (CZ-ISCO profese, vzdělání...) čitelné popisky nemají.
-- Žádné trvalé úložiště — data se validují a drží v paměti procesu, po restartu API se načtou znovu (viz startup cena výše).
+- I s persistentním volume má první nasazení (nebo obnova cache po 24 h) výpadek `/api/*` na dobu stahování a stavby SQLite (řádově desítky sekund až minuty, závisí na rychlosti spojení na `data.mpsv.cz`) — FastAPI lifespan tohle blokuje místo aby běžel na pozadí.

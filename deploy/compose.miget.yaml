@@ -1,0 +1,3 @@
+volumes:
+  data:
+    x-miget: { size: "500", type: RWO }

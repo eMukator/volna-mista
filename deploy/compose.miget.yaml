@@ -1,4 +1,0 @@
-services:
-  api:
-    x-miget:
-      private: true

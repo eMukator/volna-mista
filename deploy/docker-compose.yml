@@ -1,14 +1,8 @@
 services:
-  api:
+  app:
     build:
-      context: ../python
-    restart: unless-stopped
-
-  web:
-    build:
-      context: ../client
+      context: ..
+      dockerfile: deploy/Dockerfile
     ports:
       - "5000:5000"
     restart: unless-stopped
-    depends_on:
-      - api

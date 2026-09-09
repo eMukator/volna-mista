@@ -1,0 +1,9 @@
+.git
+.scratch
+**/__pycache__
+*.pyc
+python/.pytest_cache
+python/tests
+python/data
+client/node_modules
+client/dist

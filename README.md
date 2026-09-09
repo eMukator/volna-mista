@@ -92,8 +92,27 @@ client/
   src/api.test.ts          vitest testy
 ```
 
+## Nasazení (produkce)
+
+Produkční stack je oddělený od vývojového `docker-compose.yml` (ten zůstává jen pro devcontainer) a žije v [`deploy/`](deploy/):
+
+- `python/Dockerfile` — produkční image API (bez `--reload`, `pip install` napevno v image).
+- `client/Dockerfile` — vícefázový build: `npm run build` → statické soubory servíruje `nginx` na portu 5000 a `/api/*` proxuje na `api:8000` (stejné mapování jako Vite dev proxy v `vite.config.ts`).
+- `deploy/docker-compose.yml` — dvě služby, `api` (interní) a `web` (veřejná, jediná s publikovaným portem 5000).
+- `deploy/compose.miget.yaml` — overlay pro [Miget](https://miget.com/) (`x-miget: private: true` u `api`, aby nedostala vlastní veřejnou URL).
+
+Ověřeno lokálně (`docker compose -f deploy/docker-compose.yml up`): `web` servíruje SPA i fallback na `index.html` pro deep-linky, `/api/health` a `/api/vacancies` fungují přes proxy.
+
+### Nasazení na Miget + vlastní doména
+
+1. Na [miget.com](https://miget.com/) založ účet/projekt a připoj tenhle GitHub repozitář jako **Compose Stack**. Jako cestu k souboru zadej `deploy` (podadresář, ne kořen repa) — Miget si v něm najde `docker-compose.yml` a automaticky přiloží `compose.miget.yaml`.
+2. Miget nasadí obě služby; veřejně dostupná bude jen `web` (poslouchá na portu 5000, jak vyžaduje Migetův ingress), `api` zůstane interní a `web` se na ni doptává přes DNS jméno služby (`api:8000`) — stejně jako v devu.
+3. V nastavení aplikace (**Settings → Domains**) přidej `volnamista.mago.cz`, u DNS providera pro `mago.cz` vytvoř TXT záznam pro ověření vlastnictví (hodnotu ukáže dashboard) a po ověření CNAME záznam `volnamista.mago.cz` → cílová hodnota z dashboardu. Miget pak sám vystaví TLS certifikát.
+4. Každý push do `main` spustí nový produkční deploy.
+
+Poznámka: `api` po každém startu znovu stahuje `volna-mista.json` z MPSV (~180 MB, řádově desítky sekund) — po dobu startu vrací `web` na `/api/*` 502, než kontejner naběhne. Trvalé úložiště cache není zavedené (viz níže).
+
 ## Co chybí / kam dál
 
 - Filtry na `kraj`/`typ mzdy` mají popisky natvrdo (14 krajů, 2 typy mzdy — stabilní, oficiální číselníky z data.mpsv.cz). Ostatní číselníky (CZ-ISCO profese, vzdělání...) čitelné popisky nemají.
-- Žádné trvalé úložiště — data se validují a drží v paměti procesu, po restartu API se načtou znovu.
-- Bez opravdového nasazení/hostingu (viz Codespaces výše jako alternativa k lokálnímu spuštění).
+- Žádné trvalé úložiště — data se validují a drží v paměti procesu, po restartu API se načtou znovu (viz startup cena výše).

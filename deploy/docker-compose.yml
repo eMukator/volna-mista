@@ -1,0 +1,14 @@
+services:
+  api:
+    build:
+      context: ../python
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../client
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    depends_on:
+      - api

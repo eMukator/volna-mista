@@ -97,6 +97,16 @@ h2 {
   font-size: 0.9rem;
 }
 
+.waking {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin: 0 0 16px;
+  font-size: 0.9rem;
+}
+
 .vacancy-list {
   list-style: none;
   margin: 0 0 20px;

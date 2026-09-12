@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { fetchVacancies, fetchVacancyById, type Vacancy, type VacancySummary } from './api';
+import { ApiError, fetchVacancies, fetchVacancyById, type Vacancy, type VacancySummary } from './api';
 import { KRAJ_LABELS, TYP_MZDY_LABELS } from './codelists'
+
+const WAKE_RETRY_MS = 5000
 
 function VacancyDetail({ vacancy, onClose }: { vacancy: Vacancy; onClose: () => void }) {
   const krajId = vacancy.mistoVykonuPrace?.pracoviste?.[0]?.adresa?.kraj?.id
@@ -56,8 +58,10 @@ function VacancyDetail({ vacancy, onClose }: { vacancy: Vacancy; onClose: () => 
 function App() {
 
   const [error, setError] = useState<string | null>(null)
+  const [waking, setWaking] = useState(false)
   const [vacancies, setVacancies] = useState<VacancySummary[]>([]);
   const [vacancy, setVacancy] = useState<Vacancy | null>(null);
+  const retryTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const [profese, setProfese] = useState('')
   const [kraj, setKraj] = useState('')
@@ -69,12 +73,20 @@ function App() {
   const dialogRef = useRef<HTMLDialogElement>(null)
 
   const getVacancies = async(currentOffset?: number) => {
+    clearTimeout(retryTimeout.current)
     try {
       const response = await fetchVacancies({ profese, kraj, typ_mzdy: typMzdy, mzda_min: mzdaMin ? parseFloat(mzdaMin) : undefined, offset: currentOffset ?? offset, limit });
       setVacancies(response);
       setError(null);
+      setWaking(false);
     }
     catch (error) {
+      if (error instanceof ApiError && error.status === 503) {
+        setWaking(true);
+        retryTimeout.current = setTimeout(() => getVacancies(currentOffset), WAKE_RETRY_MS);
+        return;
+      }
+      setWaking(false);
       setError(error instanceof Error ? error.message : 'Nepodařilo se načíst data')
     }
   }
@@ -95,6 +107,7 @@ function App() {
 
   useEffect(() => {
     getVacancies(0);
+    return () => clearTimeout(retryTimeout.current);
   }, []);
 
   useEffect(() => {
@@ -126,6 +139,7 @@ function App() {
         <button type="submit">Hledat</button>
       </form>
 
+      {waking && <p className="waking">Aplikace se probouzí, počkej prosím&hellip;</p>}
       {error && <p className="error">{error}</p>}
 
       <ul className="vacancy-list">

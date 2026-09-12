@@ -61,11 +61,8 @@ Nepoužívej tenhle způsob současně s připojeným devcontainerem — obě ce
 ## Testy
 
 ```
-# backend, z python/
-pytest tests/
-
-# frontend, z client/
-npm test
+./test-backend.sh    # pytest, python/tests/
+./test-frontend.sh   # vitest, client/
 ```
 
 Testy neběží proti reálným MPSV datům — backend testy si data vyrábí ručně (`make_vacancy` factory v `python/tests/test_main.py`), frontend testy mockují `fetch`. Běží i v CI (viz badge nahoře) bez závislosti na síti.
@@ -108,9 +105,12 @@ API a web jsou v jednom kontejneru záměrně: Migetův free tier má strop 256M
 
 Ověřeno s reálným limitem (`docker run --memory=256m --memory-swap=256m`): peak paměti při prvním startu (stažení + naplnění SQLite) ~100 MiB, bez OOM.
 
-Persistentní volume znamená, že se `volna-mista.json` a SQLite DB stahují/staví jen jednou za 24 h (viz freshness check v `db.py`), ne při každém restartu kontejneru — bez volume by každý restart znovu spustil několikaminutové stahování a `/api/*` by po tu dobu vracelo chybu.
+Persistentní volume znamená, že se `volna-mista.json` a SQLite DB stahují/staví jen jednou za 24 h (viz freshness check v `db.py`), ne při každém restartu kontejneru.
+
+### Start API a stav "not ready"
+
+Stažení dat a naplnění SQLite (při prvním nasazení nebo po 24 h) běží na pozadí (`asyncio.to_thread` ve `main.py` lifespan) — API server naslouchá hned. Dokud data nejsou připravená, `/vacancies*` vrací `503` a `/health` reportuje průběžný stav (`downloading`, `importing data into SQLite: NN.NN%`, `creating indexes`, `ready`). Frontend na `503` zobrazí hlášku se stavem z `/health` a automaticky zkouší znovu každých 5 s (`App.tsx`, `WAKE_RETRY_MS`).
 
 ## Co chybí / kam dál
 
 - Filtry na `kraj`/`typ mzdy` mají popisky natvrdo (14 krajů, 2 typy mzdy — stabilní, oficiální číselníky z data.mpsv.cz). Ostatní číselníky (CZ-ISCO profese, vzdělání...) čitelné popisky nemají.
-- I s persistentním volume má první nasazení (nebo obnova cache po 24 h) výpadek `/api/*` na dobu stahování a stavby SQLite (řádově desítky sekund až minuty, závisí na rychlosti spojení na `data.mpsv.cz`) — FastAPI lifespan tohle blokuje místo aby běžel na pozadí.

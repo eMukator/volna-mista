@@ -44,6 +44,19 @@ export async function fetchVacancies(filters: VacancyFilters = {}): Promise<Vaca
   return data as VacancySummary[]
 }
 
+export type HealthStatus = {
+  status: string
+  ready: boolean
+  message: string
+}
+
+export async function fetchHealth(): Promise<HealthStatus> {
+  const response = await fetch('/api/health')
+  if (!response.ok)
+    throw new ApiError(`HTTP error! status: ${response.status}`, response.status)
+  return response.json() as Promise<HealthStatus>
+}
+
 export async function fetchVacancyById(id: string): Promise<Vacancy> {
   const response = await fetch(`/api/vacancies/${id}`)
   if (!response.ok) {

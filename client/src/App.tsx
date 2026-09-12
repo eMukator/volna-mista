@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ApiError, fetchVacancies, fetchVacancyById, type Vacancy, type VacancySummary } from './api';
+import { ApiError, fetchVacancies, fetchVacancyById, fetchHealth, type Vacancy, type VacancySummary } from './api';
 import { KRAJ_LABELS, TYP_MZDY_LABELS } from './codelists'
 
 const WAKE_RETRY_MS = 5000
@@ -59,6 +59,7 @@ function App() {
 
   const [error, setError] = useState<string | null>(null)
   const [waking, setWaking] = useState(false)
+  const [healthMessage, setHealthMessage] = useState<string | null>(null)
   const [vacancies, setVacancies] = useState<VacancySummary[]>([]);
   const [vacancy, setVacancy] = useState<Vacancy | null>(null);
   const retryTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -79,10 +80,12 @@ function App() {
       setVacancies(response);
       setError(null);
       setWaking(false);
+      setHealthMessage(null);
     }
     catch (error) {
       if (error instanceof ApiError && error.status === 503) {
         setWaking(true);
+        fetchHealth().then((health) => setHealthMessage(health.message)).catch(() => {});
         retryTimeout.current = setTimeout(() => getVacancies(currentOffset), WAKE_RETRY_MS);
         return;
       }
@@ -139,7 +142,7 @@ function App() {
         <button type="submit">Hledat</button>
       </form>
 
-      {waking && <p className="waking">Aplikace se probouzí, počkej prosím&hellip;</p>}
+      {waking && <p className="waking">{healthMessage ?? 'Application is waking up, please wait&hellip;'}</p>}
       {error && <p className="error">{error}</p>}
 
       <ul className="vacancy-list">

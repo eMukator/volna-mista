@@ -11,16 +11,22 @@ from tools import summarize
 
 db_path: str = Path(__file__).parent.parent / "data/db/volna-mista.db"
 ready: bool = False
+status: str = "initializing"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async def build():
-        global ready
-        await asyncio.to_thread(prepare_sqlite, "https://data.mpsv.cz/od/soubory/volna-mista/volna-mista.json", Path(__file__).parent.parent / "data/raw/volna-mista.json", db_path)
+        global ready, status
+        status = "initializing"
+        await asyncio.to_thread(prepare_sqlite, "https://data.mpsv.cz/od/soubory/volna-mista/volna-mista.json", Path(__file__).parent.parent / "data/raw/volna-mista.json", db_path, update_status)
         ready = True
+        status = "ready"
     asyncio.create_task(build())
     yield
     
+def update_status(s):
+    global status
+    status = s
 
 def get_filtered_vacancies(db_path: str, offset: int, limit: int, kraj: str | None, typ_mzdy: str | None, mzda_min: float | None, profese: str | None) -> list[VacancySummary]:
     query_str = "SELECT data FROM polozky"
@@ -57,7 +63,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "ready": ready, "message": status}
 
 @app.get("/vacancies", response_model=list[VacancySummary])
 def get_vacancies(

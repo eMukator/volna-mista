@@ -142,7 +142,7 @@ function App() {
         <button type="submit">Hledat</button>
       </form>
 
-      {waking && <p className="waking">{healthMessage ?? 'Application is waking up, please wait&hellip;'}</p>}
+      {waking && <p className="waking">{healthMessage ?? 'Application is waking up, please wait\u2026'}</p>}
       {error && <p className="error">{error}</p>}
 
       <ul className="vacancy-list">
